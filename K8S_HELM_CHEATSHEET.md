@@ -101,3 +101,38 @@ helm rollback urlshortener 1 -n urlshortener
 # 7. Gỡ cài đặt toàn bộ hệ thống khỏi Kubernetes
 helm uninstall urlshortener -n urlshortener
 ```
+
+---
+
+## 4. Bước 6.2 — `metrics-server` (Đo CPU/RAM cho HPA, `kubectl top`, cột CPU/MEM trong `k9s`)
+
+```powershell
+# Thêm kho chart cộng đồng + cài vào kube-system
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm repo update
+helm upgrade --install metrics-server metrics-server/metrics-server -n kube-system --set "args={--kubelet-insecure-tls}"
+#   --kubelet-insecure-tls: CHỈ dùng cho lab (Docker Desktop dùng cert tự ký). KHÔNG dùng trên Production!
+
+# Kiểm tra (đợi ~60s sau khi cài)
+kubectl top nodes
+kubectl top pods -n urlshortener
+kubectl get hpa -n urlshortener          # TARGETS phải là số (vd cpu: 19%/70%), không phải <unknown>
+
+# Xem QoS Class của từng Pod (BestEffort / Burstable / Guaranteed)
+kubectl get pods -n urlshortener -o custom-columns="NAME:.metadata.name,QOS:.status.qosClass"
+```
+
+### Đọc các cột trong `k9s` (`:pod`)
+| Cột | Ý nghĩa |
+| :--- | :--- |
+| `CPU` | CPU thực dùng, đơn vị millicore (`8` = 8m = 0.008 core) |
+| `%CPU/R` | % so với `requests.cpu` → **HPA dùng con số này** để so với ngưỡng |
+| `%CPU/L` | % so với `limits.cpu` → chạm 100% sẽ bị **throttle** (bóp CPU, chậm lại) |
+| `MEM`, `%MEM/R`, `%MEM/L` | Tương tự cho RAM. Chạm 100% `limits.memory` → Pod bị **OOMKilled** |
+| `n/a` | Pod chưa khai báo `resources` → không tính được % (QoS = `BestEffort`) |
+
+### Công thức HPA
+```
+desiredReplicas = ceil( currentReplicas × currentUtilization / targetUtilization )
+Ví dụ: ceil(3 × 140% / 70%) = 6 Pods
+```

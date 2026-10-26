@@ -44,8 +44,11 @@ Thư mục gốc `url-shortener-infra/` chứa 3 Git repositories độc lập:
   - Bật cụm Kubernetes local (`docker-desktop` v1.34.1).
   - Viết và thực hành 8 file K8s Manifests thuần trong `deployments/k8s/`: `Namespace`, `ConfigMap` (override `nginx.conf` sang CoreDNS `kube-dns.kube-system.svc.cluster.local` và FQDN `backend-service.urlshortener.svc.cluster.local`), `Secret`, `PVC` (`256Mi`), `Deployment` + `initContainers` (`wait-for-postgres` thay thế `depends_on`), `Service` (`ClusterIP`, `LoadBalancer` port `3000:30300`), `HPA` (`3 -> 6` pods), `aspire-dashboard` (`18888:31888`).
   - Sử dụng `k9s -n urlshortener` để quan sát trực quan và đóng gói toàn bộ thành **Helm Chart** (`deployments/helm/urlshortener`), thực hành `helm upgrade --install`, `--set`, `helm history` và `helm rollback` (đang chạy ở `Revision 3`).
-- [ ] **Bước 6: Observability & Load Testing (`Prometheus` + `Grafana` + `Loki` + `k6`)** *(TIẾP THEO - Bắt đầu tại đây)*
-  - Cấu hình xuất Prometheus Metrics từ `.NET 10 API` (`/metrics` với OpenTelemetry Prometheus Exporter) và thu thập Logs tập trung.
-  - Triển khai `Prometheus` + `Grafana` lên Kubernetes (hoặc Docker) và dựng **Grafana Dashboard** tổng hợp (Request Rate RPS, Error Rate, P95/P99 Latency, CPU/RAM từng Pod, Active Replicas).
-  - Viết kịch bản **Load Testing với `k6`** bắn tải cao vào hệ thống để quan sát trực tiếp biểu đồ nhảy múa trên Grafana và xem Kubernetes `HPA` tự động scale Pod!
+- [ ] **Bước 6: Observability & Load Testing (`Prometheus` + `Grafana` + `Loki` + `k6`)** *(ĐANG THỰC HIỆN - Tiếp tục từ Chặng 6.1)*
+  - [x] **Chặng 6.2 (Đã xong)**: Cài đặt `metrics-server` lên `kube-system` bằng Helm (`--set "args={--kubelet-insecure-tls}"`), kích hoạt thành công `HPA` (`cpu: 19%/70%` thay vì `<unknown>`), xem `%CPU/R`, `%MEM/R` trong `k9s`, và học về **QoS Class** (`BestEffort` vs `Burstable` vs `Guaranteed`) + công thức tính replicas của HPA.
+  - [ ] **Chặng 6.1 (TIẾP THEO - Bắt đầu tại đây)**: Thêm package `OpenTelemetry.Exporter.Prometheus.AspNetCore` (`1.14.0-beta.1`) vào `UrlShortener.ServiceDefaults` (`Directory.Packages.props`, `UrlShortener.ServiceDefaults.csproj`, `Extensions.cs` với `AddPrometheusExporter()` và `app.MapPrometheusScrapingEndpoint()`), đồng thời bổ sung `resources` (`requests`/`limits`) cho `postgres`, `redis`, `aspire-dashboard` trong Helm Chart để nâng QoS Class từ `BestEffort` lên `Burstable`.
+  - [ ] **Chặng 6.3**: Cài đặt `kube-prometheus-stack` (Prometheus + Grafana) bằng Helm và cấu hình scrape `/metrics` từ các Pod Backend.
+  - [ ] **Chặng 6.4**: Cài đặt `Loki` + `Promtail` để thu thập Logs tập trung của toàn bộ Pod về Grafana.
+  - [ ] **Chặng 6.5**: Dựng **Grafana Dashboard** chuẩn RED Metrics (Request Rate RPS, Error Rate, P95/P99 Latency, CPU/RAM từng Pod, Active Replicas).
+  - [ ] **Chặng 6.6**: Viết kịch bản **Load Testing với `k6`** bắn tải cao vào hệ thống để quan sát trực tiếp biểu đồ nhảy múa trên Grafana và xem Kubernetes `HPA` tự động scale Pod từ `3 -> 6`!
 - [ ] **Bước 7: Infrastructure as Code (`Terraform`)**: Viết Terraform để dựng hạ tầng tự động bằng code.
