@@ -1,0 +1,100 @@
+name: url-shortener-fullstack
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: urlshortener-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Vui_long_khai_bao_POSTGRES_PASSWORD_trong_file_env}
+      POSTGRES_DB: ${POSTGRES_DB:-urlshortener}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - urlshortener-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d urlshortener"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: urlshortener-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - urlshortener-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: src/UrlShortener.API/Dockerfile
+    image: urlshortener-api:latest
+    # Bỏ container_name cứng và bỏ ports 8080:8080 để có thể nhân bản (scale) nhiều instance chạy song song sau Nginx
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-urlshortener};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Vui_long_khai_bao_POSTGRES_PASSWORD_trong_file_env}"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false,connectTimeout=300,syncTimeout=300,asyncTimeout=300"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
+      OTEL_SERVICE_NAME: "urlshortener-api"
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - urlshortener-net
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    image: urlshortener-fe:latest
+    container_name: urlshortener-frontend
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM_URL: "http://backend:8080"
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - urlshortener-net
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    container_name: urlshortener-aspire-dashboard
+    restart: unless-stopped
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18888:18888"
+    networks:
+      - urlshortener-net
+
+networks:
+  urlshortener-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
