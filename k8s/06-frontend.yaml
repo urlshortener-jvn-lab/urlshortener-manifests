@@ -1,0 +1,79 @@
+# =====================================================================
+# 06. FRONTEND (React + Nginx Reverse Proxy) — Deployment + LoadBalancer
+# =====================================================================
+# - Chạy 2 Replicas cho cả tầng Frontend/Nginx để nếu 1 Pod Nginx chết thì vẫn còn Pod kia đón khách!
+# - Mount ConfigMap `frontend-nginx-config` đè vào `/etc/nginx/templates/default.conf.template`
+#   để dùng CoreDNS của Kubernetes mà không cần build lại Docker Image.
+# - Service type `LoadBalancer` (kèm `nodePort: 30300`): Mở cổng 3000 (và 30300) ra máy thật
+#   để bạn mở trình duyệt tại http://localhost:3000 hoặc http://localhost:30300.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: urlshortener
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: urlshortener-fe:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: API_UPSTREAM_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: urlshortener-config
+                  key: API_UPSTREAM_URL
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-template-volume
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+      volumes:
+        - name: nginx-template-volume
+          configMap:
+            name: frontend-nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: urlshortener
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 3000
+      targetPort: 80
+      nodePort: 30300

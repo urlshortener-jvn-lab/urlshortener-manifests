@@ -1,0 +1,54 @@
+# =====================================================================
+# 08. ASPIRE DASHBOARD — Trung tâm quan sát OpenTelemetry (Logs, Traces, Metrics) trên K8s
+# =====================================================================
+# - Nhận dữ liệu OpenTelemetry (OTLP gRPC cổng 18889) từ cả 3 Pod Backend.
+# - Mở giao diện Web UI ra cổng http://localhost:18888 để theo dõi trực quan.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aspire-dashboard
+  namespace: urlshortener
+  labels:
+    app: aspire-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aspire-dashboard
+  template:
+    metadata:
+      labels:
+        app: aspire-dashboard
+    spec:
+      containers:
+        - name: aspire-dashboard
+          image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 18888
+              name: http-ui
+            - containerPort: 18889
+              name: otlp-grpc
+          env:
+            - name: DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aspire-dashboard-service
+  namespace: urlshortener
+spec:
+  type: LoadBalancer
+  selector:
+    app: aspire-dashboard
+  ports:
+    - name: http-ui
+      port: 18888
+      targetPort: 18888
+      nodePort: 31888
+    - name: otlp-grpc
+      port: 18889
+      targetPort: 18889
+      nodePort: 31889

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: urlshortener
+description: Helm Chart triển khai toàn bộ hệ thống URL Shortener (.NET 10 API, React 19 + Nginx, PostgreSQL, Redis, HPA & Aspire Dashboard)
+type: application
+# version: Phiên bản của gói Helm Chart (tăng khi sửa cấu trúc file YAML trong templates/)
+version: 0.1.0
+# appVersion: Phiên bản của ứng dụng bên trong (tăng khi phát hành code BE/FE mới)
+appVersion: "1.0.0"

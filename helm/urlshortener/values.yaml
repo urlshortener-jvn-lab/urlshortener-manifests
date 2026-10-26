@@ -1,0 +1,92 @@
+# ==============================================================================
+# BẢNG ĐIỀU KHIỂN TRUNG TÂM CỦA HELM CHART (values.yaml)
+# ==============================================================================
+# - Đây là nơi DUY NHẤT bạn cần chỉnh sửa khi muốn đổi số lượng Pod, đổi phiên bản
+#   Docker Image, đổi cổng mạng hoặc tăng giảm CPU/RAM cho các môi trường Dev/Staging/Prod!
+# - Các file trong thư mục `templates/` sẽ tự động đọc giá trị từ file này qua cú pháp
+#   `{{ .Values.ten_bien }}` để sinh ra file Kubernetes YAML hoàn chỉnh.
+
+global:
+  environment: "Production"
+
+# 1. Cấu hình tầng Backend (.NET 10 API)
+backend:
+  replicaCount: 3
+  image:
+    repository: urlshortener-api
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  # Cấu hình tự động co giãn số lượng Pod (HPA)
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# 2. Cấu hình tầng Frontend (React 19 + Nginx Reverse Proxy)
+frontend:
+  replicaCount: 2
+  image:
+    repository: urlshortener-fe
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 3000
+    targetPort: 80
+    nodePort: 30300
+  resources:
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+# 3. Cấu hình tầng Database (PostgreSQL)
+postgres:
+  image:
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    database: "urlshortener"
+    username: "postgres"
+    password: "postgres_k8s_secret_password"
+  storage:
+    size: "256Mi"
+  service:
+    port: 5432
+
+# 4. Cấu hình tầng Cache (Redis)
+redis:
+  image:
+    repository: redis
+    tag: "7.4-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  timeoutMs: 300
+
+# 5. Cấu hình Đài quan sát OpenTelemetry (Aspire Dashboard)
+aspireDashboard:
+  enabled: true
+  image:
+    repository: mcr.microsoft.com/dotnet/aspire-dashboard
+    tag: "9.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    uiPort: 18888
+    uiNodePort: 31888
+    otlpPort: 18889
+    otlpNodePort: 31889

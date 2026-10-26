@@ -1,0 +1,15 @@
+# =====================================================================
+# 01. NAMESPACE — Vách ngăn cô lập tài nguyên dự án trên cụm Kubernetes
+# =====================================================================
+# - Nó là gì? Một "căn phòng ảo" riêng biệt bên trong cụm Kubernetes.
+# - Tại sao phải có? Trên 1 cụm K8s thực tế có hàng chục dự án cùng chạy.
+#   Nếu nhét tất cả vào namespace "default", tên Service bị trùng nhau và khi
+#   muốn xóa 1 dự án sẽ xóa nhầm Pod của dự án khác.
+# - Với Namespace riêng "urlshortener", lúc dọn dẹp chỉ cần 1 lệnh:
+#   `kubectl delete namespace urlshortener` là sạch bong 100%!
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: urlshortener
+  labels:
+    app.kubernetes.io/part-of: url-shortener-infra

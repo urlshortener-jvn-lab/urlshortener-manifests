@@ -1,0 +1,30 @@
+# =====================================================================
+# 07. HPA (Horizontal Pod Autoscaler) — Tự động co giãn số lượng Pod
+# =====================================================================
+# - Nó là gì? Bộ điều khiển tự động tăng/giảm số lượng Pod của `Deployment/backend`
+#   dựa trên mức tiêu thụ tài nguyên thực tế (CPU / RAM).
+# - Hoạt động thế nào?
+#   + Bình thường vắng khách: Giữ tối thiểu `minReplicas: 3` Pods.
+#   + Khi có bão truy cập (ví dụ bắn tải k6 ở Bước 6 làm CPU trung bình vượt 70%):
+#     K8s tự động đẻ thêm Pod mới lên tối đa `maxReplicas: 6` Pods!
+#   + Khi hết bão truy cập: Tự động thu gọn về 3 Pods để tiết kiệm RAM/CPU.
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: urlshortener
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 3
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

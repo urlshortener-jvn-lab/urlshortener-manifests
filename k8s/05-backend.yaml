@@ -1,0 +1,100 @@
+# =====================================================================
+# 05. BACKEND (.NET 10 API) — Deployment (3 Replicas) + Probes + Service
+# =====================================================================
+# Những vũ khí Production quan trọng nhất trong file này:
+# 1. replicas: 3 -> Luôn duy trì 3 Pod chạy song song. Xóa 1 Pod, K8s tự đẻ bù ngay lập tức.
+# 2. resources (requests & limits):
+#    - requests: Xin tối thiểu 50m CPU (0.05 core) và 128MB RAM để lên lịch chạy Pod.
+#    - limits: Khống chế trần 500m CPU (0.5 core) và 256MB RAM (tránh 1 Pod bị memory leak ăn sập cả Server).
+#    - BẮT BUỘC phải có `requests.cpu` thì HPA (Auto-scaling) mới tính được % CPU!
+# 3. readinessProbe (/health) & livenessProbe (/alive):
+#    - readinessProbe: Kiểm tra DB & Redis đã thông chưa. Nếu chưa thông, Service tạm ngắt không đẩy khách vào Pod đó.
+#    - livenessProbe: Kiểm tra process C# có bị treo (deadlock) không. Nếu đơ, K8s tự restart Pod.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: urlshortener
+  labels:
+    app: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Khi nâng cấp bản mới, cho phép tạo dư thêm tối đa 1 Pod mới trước
+      maxUnavailable: 0  # Đảm bảo KHÔNG CÓ Pod nào bị tắt trước khi Pod mới sẵn sàng (Zero-Downtime!)
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # initContainers: Giải pháp chuẩn của Kubernetes thay thế cho `depends_on` của Docker Compose!
+      # Container phụ này sẽ chạy TRƯỚC. Nó gõ cửa Postgres mỗi 2 giây cho tới khi Postgres khởi tạo
+      # xong ổ cứng và mở cổng 5432 thì mới cho phép Container .NET chính thức khởi động (để tạo bảng short_urls)!
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:17-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres-service -p 5432 -U postgres -d urlshortener; do
+                echo "Đang đợi PostgreSQL khởi tạo xong...";
+                sleep 2;
+              done;
+              echo "PostgreSQL đã sẵn sàng!"
+      containers:
+        - name: backend
+          image: urlshortener-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: urlshortener-config
+            - secretRef:
+                name: urlshortener-secret
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+# Service ClusterIP: Đứng trước 3 Pod Backend để gom thành 1 địa chỉ nội bộ duy nhất
+# và tự động Load Balance (Round-Robin) chia đều request vào các Pod đang Ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: urlshortener
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -1,0 +1,53 @@
+{{- if .Values.aspireDashboard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aspire-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: aspire-dashboard
+    {{- include "urlshortener.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aspire-dashboard
+  template:
+    metadata:
+      labels:
+        app: aspire-dashboard
+    spec:
+      containers:
+        - name: aspire-dashboard
+          image: "{{ .Values.aspireDashboard.image.repository }}:{{ .Values.aspireDashboard.image.tag }}"
+          imagePullPolicy: {{ .Values.aspireDashboard.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.aspireDashboard.service.uiPort }}
+              name: http-ui
+            - containerPort: {{ .Values.aspireDashboard.service.otlpPort }}
+              name: otlp-grpc
+          env:
+            - name: DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aspire-dashboard-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "urlshortener.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.aspireDashboard.service.type }}
+  selector:
+    app: aspire-dashboard
+  ports:
+    - name: http-ui
+      port: {{ .Values.aspireDashboard.service.uiPort }}
+      targetPort: {{ .Values.aspireDashboard.service.uiPort }}
+      nodePort: {{ .Values.aspireDashboard.service.uiNodePort }}
+    - name: otlp-grpc
+      port: {{ .Values.aspireDashboard.service.otlpPort }}
+      targetPort: {{ .Values.aspireDashboard.service.otlpPort }}
+      nodePort: {{ .Values.aspireDashboard.service.otlpNodePort }}
+{{- end }}
